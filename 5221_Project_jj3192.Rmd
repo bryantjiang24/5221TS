@@ -1,0 +1,136 @@
+---
+title: "5221_Project"
+author: "Jingyou Jiang"
+date: "2022/4/30"
+output:
+  html_document: default
+  pdf_document: 
+     latex_engine: xelatex
+---
+
+## Forecasting Spatial-Temporal Climate Data
+
+### I. Introduction
+
+```{r}
+WindSpeed_Month_Ave<-read.csv("WindSpeed_Month_Ave.csv")
+head(WindSpeed_Month_Ave[,1:5])
+dim(WindSpeed_Month_Ave)
+```
+
+
+```{r}
+plot(WindSpeed_Month_Ave$X1,type="o",main="X1")
+```
+EDA
+```{r}
+WS<-WindSpeed_Month_Ave[,3:length(WindSpeed_Month_Ave)]
+n<-length(WS)
+WS_mean<-rep(NA,n)
+WS_month_mean<-rowMeans(WS)
+for (i in 1:n){
+  WS_mean[i]<-mean(WS[,i])
+}
+deseason_WS_mean<-NA
+for (i in 1:12){
+  deseason_WS_mean[i]<-mean(WS_month_mean[seq(i,480,12)])
+}
+WS_mean[1]
+plot(deseason_WS_mean,type="l")
+X1_ts<-ts(WS$X1,frequency = 12)
+X1_decompose<-decompose(X1_ts)
+plot(X1_decompose)
+X1_adj <- X1_ts - X1_decompose$seasonal
+plot(X1_adj,type="o")
+par(mfrow=c(2,2))
+acf(WS$X1)
+acf(X1_adj)
+pacf(WS$X1)
+pacf(X1_adj)
+```
+```{r}
+WS_ts<-ts(WS,frequency = 12)
+WS_decompose<-decompose(WS_ts)
+WS_adj <- as.data.frame(WS_ts - WS_decompose$seasonal)
+train_WS<-as.data.frame(WS[1:360,])
+test_WS<-as.data.frame(WS[361:480,])
+train_WS_adj<-WS_adj[1:360,]
+train_WS_adj<-WS_adj[361:480,]
+```
+
+ARIMA Model
+```{r}
+library(forecast)
+train_X1<-WS$X1[1:360]
+test_X1<-WS$X1[361:480]
+model1<-auto.arima(train_X1)
+summary(model1)
+X1_fore<-forecast(test_X1,model=model1,h=6)
+plot(X1_fore)
+accuracy(X1_fore,test=test_X1)
+X1_fore$mean
+```
+
+Model Parameter Selection
+
+```{r}
+order<-matrix(NA,nrow=n,ncol=7)
+freq_order<-rep(NA,7)
+for (i in 1:n){
+  model<-auto.arima(WS[,i])
+  order[i,]<-model$arma
+}
+for (i in 1:7){
+  freq_order[i]<-as.numeric(names(which.max(table(as.data.frame(order)[,i]))))
+}
+freq_order
+```
+
+Model Check
+
+```{r}
+position_sim<-sample(n,3)
+model2<-arima(x=test_X1,order=c(freq_order[1],freq_order[6],freq_order[2]),
+              seasonal = c(freq_order[3],freq_order[7],freq_order[4]))
+summary(model2)
+X1_best_fore<-forecast(test_X1,model=model2,h=6)
+plot(X1_best_fore)
+accuracy(X1_best_fore,test=test_X1)
+X1_best_fore$mean
+predict(X1_best_fore)
+qqnorm(X1_best_fore$residuals)
+position_sim
+```
+
+```{r}
+arima.model1<-arima(x=test_WS[position_sim[1]],order=c(freq_order[1],freq_order[6],freq_order[2]),
+                    seasonal = c(freq_order[3],freq_order[7],freq_order[4]))
+summary(arima.model1)
+best_fore_1<-forecast(test_WS[position_sim[1]],model=arima.model1,h=6)
+plot(best_fore_1)
+accuracy(best_fore_1,test=WS[,position_sim[1]][361:480])
+predict(best_fore_1)
+qqnorm(best_fore_1$residuals)
+```
+
+```{r}
+arima.model2<-arima(x=test_WS[position_sim[2]],order=c(freq_order[1],freq_order[6],freq_order[2]),
+                    seasonal = c(freq_order[3],freq_order[7],freq_order[4]))
+summary(arima.model2)
+best_fore_2<-forecast(test_WS[position_sim[2]],model=arima.model2,h=6)
+plot(best_fore_2)
+accuracy(best_fore_2,test=WS[,position_sim[2]][361:480])
+predict(best_fore_2)
+qqnorm(best_fore_2$residuals)
+```
+
+```{r}
+arima.model3<-arima(x=test_WS[position_sim[3]],order=c(freq_order[1],freq_order[6],freq_order[2]),
+                    seasonal = c(freq_order[3],freq_order[7],freq_order[4]))
+summary(arima.model3)
+best_fore_3<-forecast(test_WS[position_sim[3]],model=arima.model3,h=6)
+plot(best_fore_3)
+accuracy(best_fore_3,test=WS[,position_sim[3]][361:480])
+predict(best_fore_3)
+qqnorm(best_fore_3$residuals)
+```
